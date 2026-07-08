@@ -48,6 +48,7 @@
     inset:0;
     width:100vw;
     height:100vh;
+    height:100dvh;
     z-index:0;
     display:block;
   }
@@ -92,11 +93,6 @@
   .btn-primary:active{transform:translateY(0)}
   .btn-ghost{background:rgba(7,6,15,.35);color:var(--fg);border:1px solid var(--line);backdrop-filter:blur(6px)}
   .btn-ghost:hover{border-color:var(--violet);background:rgba(139,92,246,.12);transform:translateY(-3px)}
-
-  .scroll-hint{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);
-    color:var(--muted);font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;
-    display:flex;flex-direction:column;align-items:center;gap:8px;animation:float 3s ease-in-out infinite}
-  @keyframes float{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-9px)}}
 
   /* ===== SECTIONS as glass panels over the field ===== */
   section.block{position:relative;padding:100px 0}
@@ -243,6 +239,23 @@
     section.block{padding:70px 0}
     .panel{padding:36px 26px}
   }
+  @media(max-width:560px){
+    .wrap{padding:0 18px}
+    .hero-inner{padding:0 18px}
+    /* stronger legibility for hero text sitting over the constellation */
+    .hero h1{text-shadow:0 3px 26px rgba(5,6,15,.92),0 0 60px rgba(5,6,15,.8)}
+    .hero p.sub{text-shadow:0 2px 20px rgba(5,6,15,.95)}
+    .cta-row{flex-direction:column;align-items:stretch;gap:12px}
+    .btn{justify-content:center;width:100%}
+    .manifesto{padding:72px 20px}
+    .cta-strip{padding:56px 24px}
+    section.block{padding:58px 0}
+    .panel{padding:30px 20px;border-radius:20px}
+    h2.section-title{font-size:clamp(1.6rem,7vw,2.1rem)}
+    .ws-accordion summary{padding:20px 20px;font-size:1.05rem}
+    .ws-step{grid-template-columns:auto 1fr;gap:14px}
+    .event-card{padding:22px 20px}
+  }
 </style>
 </head>
 <body>
@@ -262,7 +275,6 @@
         <a href="#chi-sono" class="btn btn-ghost">Scopri il metodo</a>
       </div>
     </div>
-    <div class="scroll-hint"><span>scorri</span><span>↓</span></div>
   </header>
 
   <!-- ===== CHI SONO ===== -->
@@ -669,14 +681,24 @@ window.addEventListener('pointermove', e => {
   tmy = (e.clientY / window.innerHeight - 0.5);
 }, { passive: true });
 
-const CAM_START = 22;   // camera z at top: frames the logo constellation at z=0
+let CAM_START = 22;     // camera z at top: frames the logo (recomputed per aspect)
 const CAM_END   = -165; // camera z at bottom: deep inside the starfield
+
+// pull the camera back on narrow/portrait screens so the whole logo fits
+function computeCamStart() {
+  const vFov = camera.fov * Math.PI / 180;
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+  const distW = 11.5 / Math.tan(hFov / 2);   // logo half-width (ring) + margin
+  const distH = 11.0 / Math.tan(vFov / 2);   // logo half-height + margin
+  return Math.max(22, distW, distH);
+}
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  CAM_START = computeCamStart();
 }
 window.addEventListener('resize', resize);
 resize();
@@ -720,6 +742,7 @@ function settleLogo() {
   allStrokes.forEach(s => s.line.geometry.setDrawRange(0, s.n));
   sM.mat.opacity=0.9; sLeft.mat.opacity=0.72; sTv.mat.opacity=0.92; sTc.mat.opacity=0.92; sRight.mat.opacity=0.72; sTail.mat.opacity=0.88;
   flashMat.opacity = 0;
+  if (heroEl && window.scrollY < 4) heroEl.style.opacity = '1';   // guarantee hero text is shown
 }
 if (reduced) { settleLogo(); if (heroEl) heroEl.style.opacity = '1'; }
 
