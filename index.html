@@ -97,9 +97,20 @@
   }
   .hero-inner{max-width:760px;padding:0 24px;margin:0 auto;width:100%;text-align:center;
     will-change:transform,opacity;opacity:0}
-  .hero-mark{display:block;width:min(340px,64vw);margin:0 auto 34px;
-    filter:drop-shadow(0 0 46px rgba(139,120,230,.55));animation:markfloat 6.5s ease-in-out infinite}
-  @keyframes markfloat{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-13px) rotate(.6deg)}}
+  /* medallion pinned on screen; the hero text scrolls up behind it, then the
+     logo shrinks into a fixed header badge */
+  #siteHeader{position:fixed;top:0;left:0;right:0;height:64px;z-index:44;pointer-events:none;
+    background:linear-gradient(180deg,rgba(5,6,15,.9),rgba(5,6,15,0));
+    backdrop-filter:blur(9px);opacity:0;will-change:opacity}
+  /* reserves the medallion's space in the hero so the text flows below it,
+     exactly like a static layout; the real logo is a fixed overlay on top */
+  #logoSlot{width:min(400px,72vw);aspect-ratio:1/1;margin:0 auto 26px}
+  #heroLogo{position:fixed;left:50%;top:40%;z-index:45;width:min(400px,72vw);border-radius:50%;
+    transform:translate(-50%,-50%);transform-origin:center center;
+    box-shadow:0 0 0 1px rgba(201,162,75,.4),0 0 90px rgba(150,130,230,.45),inset 0 0 40px rgba(0,0,0,.4);
+    filter:drop-shadow(0 0 40px rgba(180,160,255,.45));
+    opacity:0;pointer-events:none;will-change:left,top,width;transition:opacity .9s ease}
+  #heroLogo.show{opacity:1}
   .hero .cta-row{justify-content:center}
   .hero .eyebrow{margin-left:auto;margin-right:auto}
   .eyebrow{
@@ -109,11 +120,11 @@
     padding:7px 15px;border-radius:100px;margin-bottom:26px;backdrop-filter:blur(6px);
   }
   .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--violet);box-shadow:0 0 12px var(--violet)}
-  .hero h1{font-size:clamp(2.6rem,6.5vw,4.9rem);margin-bottom:22px;
+  .hero h1{font-size:clamp(1.45rem,3.4vw,2.4rem);margin-bottom:16px;
     text-shadow:0 4px 40px rgba(7,6,15,.7)}
   .hero h1 .accent{background:linear-gradient(120deg,var(--violet),var(--indigo));
     -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-  .hero p.sub{font-size:clamp(1.05rem,2.2vw,1.3rem);color:var(--muted);max-width:560px;margin-bottom:38px;
+  .hero p.sub{font-size:clamp(.88rem,1.5vw,1rem);color:var(--muted);max-width:500px;margin-bottom:32px;margin-left:auto;margin-right:auto;
     text-shadow:0 2px 24px rgba(7,6,15,.8)}
   .cta-row{display:flex;gap:16px;flex-wrap:wrap}
   .btn{display:inline-flex;align-items:center;gap:10px;font-size:1rem;font-weight:600;
@@ -300,12 +311,16 @@
   <img id="introLogo" src="assets/logo-circle.png" alt="Mappa dei Talenti · Destinazione Quantica">
 </div>
 
+<!-- logo pinned on screen; shrinks into this header as you scroll -->
+<div id="siteHeader"></div>
+<img id="heroLogo" src="assets/logo-circle.png" alt="Mappa dei Talenti · Destinazione Quantica">
+
 <div class="page">
 
   <!-- ===== HERO ===== -->
   <header class="hero">
     <div class="hero-inner">
-      <span class="eyebrow"><span class="dot"></span> Mappa dei Talenti · Destinazione Quantica</span>
+      <div id="logoSlot" aria-hidden="true"></div>
       <h1>Navigare le possibilità<br>attraverso gli <span class="accent">archetipi</span></h1>
       <p class="sub">Il significato nascosto delle tue emozioni, letto attraverso simboli, archetipi e la Mappa dei Talenti. Una fotografia energetica della tua struttura interiore, per trasformare il disorientamento in direzione.</p>
       <div class="cta-row">
@@ -699,17 +714,43 @@ const introEl = document.getElementById('intro');
 const introBg = document.getElementById('introBg');
 const introFlash = document.getElementById('introFlash');
 const introLogo = document.getElementById('introLogo');
+const heroLogo = document.getElementById('heroLogo');
+const siteHeader = document.getElementById('siteHeader');
+const logoSlot = document.getElementById('logoSlot');
 
-// subtle hero lift on scroll (no camera fly-through anymore)
+// scroll director: the logo sits in its hero slot (text below it, like a static
+// layout); scrolling lifts the text up behind it, then the logo shrinks and
+// docks into the fixed header badge
 let heroShown = false;
+const clampf = x => Math.min(Math.max(x, 0), 1);
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// where the medallion rests in the hero, in viewport coords at scroll top
+let base = { cx: 0, cy: 0, size: 300 };
+function measureBase() {
+  const r = logoSlot.getBoundingClientRect();
+  base.cx = r.left + r.width / 2;
+  base.cy = r.top + window.scrollY + r.height / 2; // = viewport centre at scroll 0
+  base.size = r.width;
+}
 function onScroll() {
-  if (!heroShown) return;
-  const start = window.innerHeight * 0.15;
-  const f = Math.min(Math.max((window.scrollY - start) / (window.innerHeight * 0.9), 0), 1);
-  heroInner.style.transform = `translateY(${-f * 40}px)`;
-  heroInner.style.opacity = String(1 - f * 0.9);
+  const vh = window.innerHeight, y = window.scrollY;
+  if (heroShown) {
+    // hero text rises and fades away behind the logo
+    const f = clampf((y - vh * 0.05) / (vh * 0.7));
+    heroInner.style.transform = `translateY(${-f * 70}px)`;
+    heroInner.style.opacity = String(1 - f);
+  }
+  // logo: from its hero slot (p=0) to a small centred header badge (p=1)
+  const p = easeIO(clampf(y / (vh * 0.72)));
+  const HEAD = { cx: window.innerWidth / 2, cy: 34, size: 54 };
+  heroLogo.style.left  = lerp(base.cx, HEAD.cx, p) + 'px';
+  heroLogo.style.top   = lerp(base.cy, HEAD.cy, p) + 'px';
+  heroLogo.style.width = lerp(base.size, HEAD.size, p) + 'px';
+  siteHeader.style.opacity = String(p);
 }
 window.addEventListener('scroll', onScroll, { passive: true });
+window.addEventListener('resize', () => { measureBase(); onScroll(); }, { passive: true });
 
 // mouse tilt (subtle)
 let tmx = 0, tmy = 0, mx = 0, my = 0;
@@ -804,6 +845,8 @@ function playIntro(t) {
     introEl.classList.add('up');
     heroShown = true;
     heroInner.style.opacity = '1';
+    heroLogo.classList.add('show');   // pinned logo takes over from the intro one
+    measureBase(); onScroll();
     setTimeout(() => introEl.classList.add('gone'), 1500);
   }
 }
@@ -813,6 +856,8 @@ if (reduced) {
   introEl.classList.add('gone');
   heroShown = true;
   heroInner.style.opacity = '1';
+  heroLogo.classList.add('show');
+  measureBase(); onScroll();
 }
 
 function animate() {
