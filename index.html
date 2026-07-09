@@ -78,9 +78,11 @@
   }
   #introLogo{
     position:relative;
-    width:min(440px,72vw);
+    width:min(420px,70vw);
+    border-radius:50%;
     opacity:0;transform:scale(.86);
-    filter:drop-shadow(0 0 60px rgba(180,160,255,.6));
+    box-shadow:0 0 0 1px rgba(201,162,75,.35), 0 0 70px rgba(150,130,230,.5), inset 0 0 40px rgba(0,0,0,.4);
+    filter:drop-shadow(0 0 40px rgba(180,160,255,.45));
     will-change:opacity,transform;
   }
 
@@ -295,7 +297,7 @@
 <div id="intro">
   <div id="introBg"></div>
   <div id="introFlash"></div>
-  <img id="introLogo" src="assets/logo-mark.png" alt="Mappa dei Talenti · Destinazione Quantica">
+  <img id="introLogo" src="assets/logo-circle.png" alt="Mappa dei Talenti · Destinazione Quantica">
 </div>
 
 <div class="page">
