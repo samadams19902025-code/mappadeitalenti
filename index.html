@@ -55,6 +55,35 @@
   /* content sits above the field */
   .page{position:relative;z-index:2}
 
+  /* ===== INTRO CURTAIN ===== */
+  #intro{
+    position:fixed;inset:0;z-index:60;
+    display:flex;align-items:center;justify-content:center;
+    pointer-events:none;
+    transform:translateY(0);
+    transition:transform 1.4s cubic-bezier(.76,0,.24,1);
+    will-change:transform;
+  }
+  #intro.up{transform:translateY(-101%)}
+  #intro.gone{display:none}
+  /* dark backing that rises during the flash so, once the flash fades,
+     we have a solid curtain to lift */
+  #introBg{position:absolute;inset:0;background:var(--bg);opacity:0;will-change:opacity}
+  /* the bloom flash itself (transparent base so the canvas genesis shows through) */
+  #introFlash{
+    position:absolute;inset:0;
+    background:radial-gradient(circle at 50% 46%, rgba(245,240,255,1), rgba(180,160,240,.85) 24%, rgba(120,100,210,.4) 44%, transparent 66%);
+    opacity:0;
+    will-change:opacity;
+  }
+  #introLogo{
+    position:relative;
+    width:min(440px,72vw);
+    opacity:0;transform:scale(.86);
+    filter:drop-shadow(0 0 60px rgba(180,160,255,.6));
+    will-change:opacity,transform;
+  }
+
   .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
 
   /* ===== HERO ===== */
@@ -261,6 +290,13 @@
 <body>
 
 <canvas id="quantum"></canvas>
+
+<!-- intro curtain: genesis flash -> real logo -> curtain rises -->
+<div id="intro">
+  <div id="introBg"></div>
+  <div id="introFlash"></div>
+  <img id="introLogo" src="assets/logo-mark.png" alt="Mappa dei Talenti · Destinazione Quantica">
+</div>
 
 <div class="page">
 
@@ -655,24 +691,23 @@ const fMat = new THREE.PointsMaterial({
 const field = new THREE.Points(fGeo, fMat);
 scene.add(field);
 
-// ---- scroll → camera Z fly-through ----
-let scrollProg = 0, targetProg = 0;
-let genDone = reduced;   // becomes true when the genesis intro is over
+// ---- refs ----
 const heroInner = document.querySelector('.hero-inner');
+const introEl = document.getElementById('intro');
+const introBg = document.getElementById('introBg');
+const introFlash = document.getElementById('introFlash');
+const introLogo = document.getElementById('introLogo');
+
+// subtle hero lift on scroll (no camera fly-through anymore)
+let heroShown = false;
 function onScroll() {
-  const max = document.documentElement.scrollHeight - window.innerHeight;
-  targetProg = max > 0 ? Math.min(Math.max(window.scrollY / max, 0), 1) : 0;
-  // hero opens into the flight: stays fully visible longer, then lifts + fades
-  // (skip while the genesis intro is still fading the hero in)
-  const start = window.innerHeight * 0.28;
-  const f = Math.min(Math.max((window.scrollY - start) / (window.innerHeight * 1.05), 0), 1);
-  if (heroInner && (genDone || window.scrollY > 4)) {
-    heroInner.style.opacity = String(1 - f);
-    heroInner.style.transform = `translateY(${-f * 60}px) scale(${1 + f * 0.08})`;
-  }
+  if (!heroShown) return;
+  const start = window.innerHeight * 0.15;
+  const f = Math.min(Math.max((window.scrollY - start) / (window.innerHeight * 0.9), 0), 1);
+  heroInner.style.transform = `translateY(${-f * 40}px)`;
+  heroInner.style.opacity = String(1 - f * 0.9);
 }
 window.addEventListener('scroll', onScroll, { passive: true });
-onScroll();
 
 // mouse tilt (subtle)
 let tmx = 0, tmy = 0, mx = 0, my = 0;
@@ -681,24 +716,21 @@ window.addEventListener('pointermove', e => {
   tmy = (e.clientY / window.innerHeight - 0.5);
 }, { passive: true });
 
-let CAM_START = 22;     // camera z at top: frames the logo (recomputed per aspect)
-const CAM_END   = -165; // camera z at bottom: deep inside the starfield
-
-// pull the camera back on narrow/portrait screens so the whole logo fits
-function computeCamStart() {
+// keep the whole logo framed, pulling the camera back on portrait screens
+let CAM_Z = 22;
+function computeCamZ() {
   const vFov = camera.fov * Math.PI / 180;
   const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
-  const distW = 11.5 / Math.tan(hFov / 2);   // logo half-width (ring) + margin
-  const distH = 11.0 / Math.tan(vFov / 2);   // logo half-height + margin
+  const distW = 11.5 / Math.tan(hFov / 2);
+  const distH = 11.0 / Math.tan(vFov / 2);
   return Math.max(22, distW, distH);
 }
-
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  CAM_START = computeCamStart();
+  CAM_Z = computeCamZ();
 }
 window.addEventListener('resize', resize);
 resize();
@@ -707,16 +739,14 @@ const clock = new THREE.Clock();
 let running = true;
 document.addEventListener('visibilitychange', () => { running = !document.hidden; });
 
-// ---- GENESIS timeline (plays once at load, then scroll takes over) ----
-const heroEl = document.querySelector('.hero-inner');
+// ---- easings ----
 const easeOut = x => 1 - Math.pow(1 - x, 3);
 const easeIO  = x => x < .5 ? 4*x*x*x : 1 - Math.pow(-2*x+2, 3)/2;
 const ph = (t,s,d) => Math.min(Math.max((t-s)/d, 0), 1);
-// [start, duration] — overlapping = smooth
-const TL = { grid:[0.2,1.5], nodes:[0.4,1.6], M:[1.3,1.5], Larc:[2.4,1.4], T:[3.4,1.4], Rarc:[4.5,1.4], tail:[5.6,1.3], bloom:[5.6,1.8] };
-const GEN_END = 7.4;
-function drawOp(seg,t){ const [s,d]=seg; const p=ph(t,s,d); return [easeIO(p), easeOut(Math.min(p/0.45,1))]; }
 
+// ---- genesis draw-on timeline ----
+const TL = { grid:[0.2,1.5], nodes:[0.4,1.6], M:[1.3,1.5], Larc:[2.4,1.4], T:[3.4,1.4], Rarc:[4.5,1.4], tail:[5.6,1.3], bloom:[5.6,1.6] };
+function drawOp(seg,t){ const [s,d]=seg; const p=ph(t,s,d); return [easeIO(p), easeOut(Math.min(p/0.45,1))]; }
 function playGenesis(t) {
   gridMat.opacity = easeOut(ph(t,TL.grid[0],TL.grid[1])) * 0.30;
   nMat.opacity    = easeOut(ph(t,TL.nodes[0],TL.nodes[1])) * 0.95;
@@ -732,48 +762,74 @@ function playGenesis(t) {
   const add = bl * 0.20;
   allStrokes.forEach(s => s.mat.opacity = Math.min(1, s.mat.opacity + add));
   gridMat.opacity += bl * 0.16;
-  // hero text appears in sync with the Q bloom
-  if (heroEl) heroEl.style.opacity = String(easeOut(ph(t, 5.9, 1.4)));
 }
-function settleLogo() {
-  // final resting state (full logo lit), used once genesis is over
-  gridMat.opacity = 0.34;
-  nMat.opacity = 0.95;
+function fullLit() {
+  gridMat.opacity = 0.34; nMat.opacity = 0.95;
   allStrokes.forEach(s => s.line.geometry.setDrawRange(0, s.n));
   sM.mat.opacity=0.9; sLeft.mat.opacity=0.72; sTv.mat.opacity=0.92; sTc.mat.opacity=0.92; sRight.mat.opacity=0.72; sTail.mat.opacity=0.88;
-  flashMat.opacity = 0;
-  if (heroEl && window.scrollY < 4) heroEl.style.opacity = '1';   // guarantee hero text is shown
 }
-if (reduced) { settleLogo(); if (heroEl) heroEl.style.opacity = '1'; }
+// calm ambient for the revealed site: constellation gone, only faint stars remain
+let dissolved = false;
+function dissolveToAmbient() {
+  dissolved = true;
+  allStrokes.forEach(s => s.mat.opacity = 0);
+  gridMat.opacity = 0.05; nMat.opacity = 0.22; flashMat.opacity = 0;
+}
+
+// ---- intro director: genesis -> flash -> real logo -> curtain rises ----
+const T_FLASH = 6.35;  // white bloom peaks
+const T_DISS  = 6.95;  // swap constellation -> ambient (hidden behind the white)
+const T_LOGO  = 6.95;  // real logo fades in from the flash
+const T_HOLD  = 9.0;   // curtain starts to rise
+let genLit = false, curtainUp = false;
+
+function playIntro(t) {
+  if (t < T_FLASH) { playGenesis(t); return; }
+  if (!genLit) { fullLit(); genLit = true; }
+  // flash: bloom up, then settle to a soft glow behind the logo
+  let fo = (t < T_FLASH + 0.55) ? easeOut(ph(t, T_FLASH, 0.5))
+                                : 1 - easeOut(ph(t, T_FLASH + 0.55, 1.1)) * 0.85;
+  introFlash.style.opacity = String(Math.max(0, fo));
+  introBg.style.opacity = String(easeOut(ph(t, T_FLASH + 0.1, 0.7)));
+  if (t >= T_DISS && !dissolved) dissolveToAmbient();
+  // real logo emerges from the flash
+  const lp = easeOut(ph(t, T_LOGO, 1.0));
+  introLogo.style.opacity = String(lp);
+  introLogo.style.transform = `scale(${0.86 + lp * 0.14})`;
+  // curtain rises, hero appears
+  if (t >= T_HOLD && !curtainUp) {
+    curtainUp = true;
+    introEl.classList.add('up');
+    heroShown = true;
+    heroInner.style.opacity = '1';
+    setTimeout(() => introEl.classList.add('gone'), 1500);
+  }
+}
+
+if (reduced) {
+  dissolveToAmbient();
+  introEl.classList.add('gone');
+  heroShown = true;
+  heroInner.style.opacity = '1';
+}
 
 function animate() {
   requestAnimationFrame(animate);
   if (!running) return;
   const t = clock.getElapsedTime();
 
-  // ease scroll progress
-  scrollProg += (targetProg - scrollProg) * (reduced ? 1 : 0.06);
-  const camZ = CAM_START + (CAM_END - CAM_START) * scrollProg;
-  camera.position.z = camZ;
-  // mouse tilt + gentle drift
+  // calm camera: static framing + gentle drift/parallax, no fly-through
+  camera.position.z = CAM_Z;
   mx += (tmx - mx) * 0.04;
   my += (tmy - my) * 0.04;
-  camera.position.x = mx * 9 + Math.sin(t * 0.1) * 1.6;
-  camera.position.y = -my * 7 + Math.cos(t * 0.13) * 1.3;
-  camera.lookAt(0, 0, camZ - 40);
+  camera.position.x = mx * 6 + Math.sin(t * 0.1) * 1.2;
+  camera.position.y = -my * 5 + Math.cos(t * 0.13) * 1.0;
+  camera.lookAt(0, 0, 0);
 
-  // genesis first, then living logo
-  if (!genDone) {
-    if (t < GEN_END && scrollProg < 0.02) {
-      playGenesis(t);
-    } else {
-      genDone = true; settleLogo();
-    }
-  } else {
-    nMat.size = 4.4 + Math.sin(t * 1.4) * 0.5;
-  }
+  if (!reduced && !curtainUp) playIntro(t);
+  else if (!dissolved) dissolveToAmbient();
+  else nMat.size = 3.0 + Math.sin(t * 1.2) * 0.3;
 
-  // logo parallax (reads as 3D)
   logoGroup.rotation.y = mx * 0.10 + Math.sin(t * 0.12) * 0.04;
   logoGroup.rotation.x = my * 0.08 + Math.cos(t * 0.15) * 0.03;
   field.rotation.z = t * 0.008;
