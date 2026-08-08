@@ -60,7 +60,7 @@
     color:var(--fg);
     font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
     line-height:1.6;
-    overflow-x:hidden;
+    overflow-x:clip; /* clip (non hidden) per non rompere position:sticky della hero */
     -webkit-font-smoothing:antialiased;
   }
   ::selection{background:var(--violet);color:#fff}
@@ -117,11 +117,16 @@
   .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
 
   /* ===== HERO ===== */
+  /* the hero pins while the logo shrinks into the header; only after the pin
+     range (extra height on .hero-track) is scrolled does the page move on, so
+     the text never slides under the shrinking logo */
+  .hero-track{position:relative;height:160svh}
   .hero{
     min-height:100svh;
     display:flex;
     align-items:center;
-    position:relative;
+    position:sticky;
+    top:0;
   }
   .hero-inner{max-width:760px;padding:0 24px;margin:0 auto;width:100%;text-align:center;
     will-change:transform,opacity;opacity:0}
@@ -480,17 +485,19 @@
 <div class="page">
 
   <!-- ===== HERO ===== -->
-  <header class="hero">
-    <div class="hero-inner">
-      <div id="logoSlot" aria-hidden="true"></div>
-      <h1>Navigare le possibilità<br>attraverso gli <span class="accent">archetipi</span></h1>
-      <p class="sub">Il significato nascosto delle tue emozioni, letto attraverso simboli, archetipi e la Mappa dei Talenti. Una fotografia energetica della tua struttura interiore, per trasformare il disorientamento in direzione.</p>
-      <div class="cta-row">
-        <a href="https://wa.me/393393270240?text=Ciao%20Stefano%2C%20vorrei%20prenotare%20una%20call%20sulla%20Mappa%20dei%20Talenti" class="btn btn-primary" target="_blank" rel="noopener">Prenota una call →</a>
-        <a href="#chi-sono" class="btn btn-ghost">Scopri il metodo</a>
+  <div class="hero-track">
+    <header class="hero">
+      <div class="hero-inner">
+        <div id="logoSlot" aria-hidden="true"></div>
+        <h1>Navigare le possibilità<br>attraverso gli <span class="accent">archetipi</span></h1>
+        <p class="sub">Il significato nascosto delle tue emozioni, letto attraverso simboli, archetipi e la Mappa dei Talenti. Una fotografia energetica della tua struttura interiore, per trasformare il disorientamento in direzione.</p>
+        <div class="cta-row">
+          <a href="https://wa.me/393393270240?text=Ciao%20Stefano%2C%20vorrei%20prenotare%20una%20call%20sulla%20Mappa%20dei%20Talenti" class="btn btn-primary" target="_blank" rel="noopener">Prenota una call →</a>
+          <a href="#chi-sono" class="btn btn-ghost">Scopri il metodo</a>
+        </div>
       </div>
-    </div>
-  </header>
+    </header>
+  </div>
 
   <!-- ===== CHI SONO ===== -->
   <section class="block" id="chi-sono">
@@ -939,14 +946,10 @@ function measureBase() {
 }
 function onScroll() {
   const vh = window.innerHeight, y = window.scrollY;
-  if (heroShown) {
-    // hero text rises and fades away behind the logo
-    const f = clampf((y - vh * 0.05) / (vh * 0.7));
-    heroInner.style.transform = `translateY(${-f * 70}px)`;
-    heroInner.style.opacity = String(1 - f);
-  }
-  // logo: from its hero slot (p=0) to a small centred header badge (p=1)
-  const p = easeIO(clampf(y / (vh * 0.72)));
+  // the hero stays pinned (see .hero-track); the scroll first shrinks the logo
+  // from its hero slot (p=0) into the small centred header badge (p=1), then the
+  // page scrolls on. Divisor matches the pin range: .hero-track height - 100svh.
+  const p = easeIO(clampf(y / (vh * 0.6)));
   const HEAD = { cx: window.innerWidth / 2, cy: 34, size: 54 };
   heroLogo.style.left  = lerp(base.cx, HEAD.cx, p) + 'px';
   heroLogo.style.top   = lerp(base.cy, HEAD.cy, p) + 'px';
